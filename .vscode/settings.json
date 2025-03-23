@@ -8,7 +8,8 @@
     "idf.portWin": "COM5",
     "idf.toolsPathWin": "C:\\Users\\abhin\\.espressif",
     "files.associations": {
-        "cstdlib": "c"
+        "cstdlib": "c",
+        "freertos.h": "c"
     },
     "idf.flashType": "UART"
 }
