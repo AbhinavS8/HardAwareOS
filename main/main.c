@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "esp_task_wdt.h"
 
 extern uint8_t temprature_sens_read();  
 
@@ -34,7 +35,7 @@ void task_manager(void *pvParameter) {
 
     while (1) {
         stats.temperature = get_internal_temp();
-        stats.cpu_usage = uxTaskGetNumberOfTasks();  // Count active tasks
+        stats.cpu_usage = (float)uxTaskGetNumberOfTasks();  // Count active tasks
 
         printf("Temp: %.2f°C | Active Tasks: %.2f\n", stats.temperature, stats.cpu_usage);
 
@@ -42,6 +43,7 @@ void task_manager(void *pvParameter) {
             if (highLoadTaskHandle != NULL) {
                 printf("Overheating! Suspending high-load task...\n");
                 vTaskSuspend(highLoadTaskHandle);
+                highLoadTaskHandle = NULL;  // Prevents double suspensions
             }
         } else {
             if (highLoadTaskHandle == NULL) {
@@ -52,21 +54,33 @@ void task_manager(void *pvParameter) {
             }
         }
 
-        xQueueSend(systemQueue, &stats, portMAX_DELAY);
+        // Safe Queue Send with Timeout
+        if (xQueueSend(systemQueue, &stats, pdMS_TO_TICKS(1000)) != pdTRUE) {
+            printf("Queue full! Dropping data.\n");
+        }
+
         vTaskDelay(pdMS_TO_TICKS(5000));  // Monitor every 5 seconds
     }
 }
 
 // Main function to start tasks
 void app_main() {
-    esp_task_wdt_init(10, true);  
-    esp_task_wdt_add(NULL);  
+    // Correct watchdog timer initialization
+    esp_task_wdt_config_t wdt_config = {
+        .timeout_ms = 10000,  // 10-second timeout
+        .idle_core_mask = (1 << portNUM_PROCESSORS) - 1, // Monitor all cores
+        .trigger_panic = true
+    };
     
+    esp_task_wdt_init(&wdt_config);  
+    esp_task_wdt_add(NULL);  // Add the current task to watchdog monitoring
+
     systemQueue = xQueueCreate(5, sizeof(SystemStats));
     xTaskCreate(task_manager, "task_manager", 4096, NULL, 5, NULL);
 
-    // Keep app_main running
+    // Keep main loop running & reset watchdog
     while (1) {
+        esp_task_wdt_reset();  // Prevents watchdog reset
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
