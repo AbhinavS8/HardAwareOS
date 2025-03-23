@@ -2,10 +2,14 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "esp_system.h"
-#include "esp_task_wdt.h"
 
 SemaphoreHandle_t xSemaphore = NULL;
 extern uint8_t temprature_sens_read();
+
+typedef struct {
+    float cpu_usage;
+    float temperature;
+} SystemStats;
 
 float get_internal_temp() {
 
@@ -23,19 +27,39 @@ void voltage_check_task() {
 }
 
 void simul_task() {
-    printf("[High Load] Processing data...\n");
-    vTaskDelay(pdMS_TO_TICKS(1000));  // Simulated workload
-    vTaskDelete(NULL);
+    for (int i=0;i<5;i++) {
+        printf("[High Load %d] Processing data...\n",i);
+        vTaskDelay(1000 / portTICK_PERIOD_MS); //workload sim
+    }
+        vTaskDelete(NULL);
+    
 }
 
 void app_main() {
 
     xSemaphore = xSemaphoreCreateBinary();
-    printf("\nTimer output in milliseconds program initiation: %lld\n", esp_timer_get_time() / 1000);
+    SystemStats stats;
+
+    printf("\nTime(ms) for program initiation: %lld\n", esp_timer_get_time() / 1000);
 
     xTaskCreate(simul_task,"sample task", 2048, NULL, 1, NULL);
+    xTaskCreate(simul_task,"sample task2", 2048, NULL, 1, NULL);
+
+    stats.temperature = get_internal_temp();
+    stats.cpu_usage = (float)uxTaskGetNumberOfTasks();
+    
+    printf("Temp: %.2f°C | Active Tasks: %.2f\n", stats.temperature, stats.cpu_usage);
 
     printf("\nProgram completion: %lld\n", esp_timer_get_time() / 1000);
+
+    for (int i = 10; i >= 0; i--) {
+        printf("Restarting in %d seconds...\n", i);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+    
+    printf("Restarting now.\n");
+    fflush(stdout);
+    esp_restart();
 }
 
 
@@ -82,7 +106,7 @@ void app_main() {
 // void task_manager(void *pvParameter) {
 //     esp_task_wdt_add(NULL);  // Register task to watchdog
 
-//     SystemStats stats;
+    // SystemStats stats;
 
 //     while (1) {
 //         stats.temperature = get_internal_temp();
