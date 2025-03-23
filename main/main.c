@@ -1,173 +1,130 @@
 #include <stdio.h>
-#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
+#include "freertos/semphr.h"
+#include "esp_system.h"
 #include "esp_task_wdt.h"
 
-extern uint8_t temprature_sens_read();  
+SemaphoreHandle_t xSemaphore = NULL;
+extern uint8_t temprature_sens_read();
 
 float get_internal_temp() {
+
     uint8_t raw_temp = temprature_sens_read();
-    return (raw_temp - 32) / 1.8;  
+    return (raw_temp - 32) / 1.8;
 }
 
-// Struct to hold system resource usage
-typedef struct {
-    float cpu_usage;
-    float temperature;
-} SystemStats;
 
-QueueHandle_t systemQueue;
-TaskHandle_t highLoadTaskHandle = NULL;  // Persistent task handle
+void temperature_check_task() {
 
-// Simulated high-load task
-void high_load_task(void *pvParameter) {
-    while (1) {
-        printf("[High Load] Processing data...\n");
-        vTaskDelay(pdMS_TO_TICKS(1000));  // Simulating workload
-    }
 }
 
-// Task manager to monitor temperature and suspend/resume tasks
-void task_manager(void *pvParameter) {
-    SystemStats stats;
-
-    while (1) {
-        stats.temperature = get_internal_temp();
-        stats.cpu_usage = (float)uxTaskGetNumberOfTasks();  // Count active tasks
-
-        printf("Temp: %.2f°C | Active Tasks: %.2f\n", stats.temperature, stats.cpu_usage);
-
-        if (stats.temperature > 65.0) {
-            if (highLoadTaskHandle != NULL) {
-                printf("Overheating! Suspending high-load task...\n");
-                vTaskSuspend(highLoadTaskHandle);
-                highLoadTaskHandle = NULL;  // Prevents double suspensions
-            }
-        } else {
-            if (highLoadTaskHandle == NULL) {
-                printf("Resuming high-load task...\n");
-                xTaskCreate(high_load_task, "high_load_task", 2048, NULL, 5, &highLoadTaskHandle);
-            } else {
-                vTaskResume(highLoadTaskHandle);
-            }
-        }
-
-        // Safe Queue Send with Timeout
-        if (xQueueSend(systemQueue, &stats, pdMS_TO_TICKS(1000)) != pdTRUE) {
-            printf("Queue full! Dropping data.\n");
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(5000));  // Monitor every 5 seconds
-    }
-}
-
-// Main function to start tasks
-void app_main() {
-    // Correct watchdog timer initialization
-    esp_task_wdt_config_t wdt_config = {
-        .timeout_ms = 10000,  // 10-second timeout
-        .idle_core_mask = (1 << portNUM_PROCESSORS) - 1, // Monitor all cores
-        .trigger_panic = true
-    };
+void voltage_check_task() {
     
-    esp_task_wdt_init(&wdt_config);  
-    esp_task_wdt_add(NULL);  // Add the current task to watchdog monitoring
-
-    systemQueue = xQueueCreate(5, sizeof(SystemStats));
-    xTaskCreate(task_manager, "task_manager", 4096, NULL, 5, NULL);
-
-    // Keep main loop running & reset watchdog
-    while (1) {
-        esp_task_wdt_reset();  // Prevents watchdog reset
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
 }
 
+void simul_task() {
+    printf("[High Load] Processing data...\n");
+    vTaskDelay(pdMS_TO_TICKS(1000));  // Simulated workload
+    vTaskDelete(NULL);
+}
+
+void app_main() {
+
+    xSemaphore = xSemaphoreCreateBinary();
+    printf("\nTimer output in milliseconds program initiation: %lld\n", esp_timer_get_time() / 1000);
+
+    xTaskCreate(simul_task,"sample task", 2048, NULL, 1, NULL);
+
+    printf("\nProgram completion: %lld\n", esp_timer_get_time() / 1000);
+}
 
 
 
 // #include <stdio.h>
+// #include "esp_system.h"
 // #include "freertos/FreeRTOS.h"
 // #include "freertos/task.h"
-// #include "driver/adc.h"
-// #include "esp_system.h"
-// #include "esp_log.h"
+// #include "freertos/queue.h"
+// #include "freertos/semphr.h"
+// #include "esp_task_wdt.h"
 
-// #define TEMP_THRESHOLD_HIGH 60.0
-// #define VOLTAGE_THRESHOLD_LOW 2.5
-// #define CPU_LOAD_HIGH 80
+// extern uint8_t temprature_sens_read();
 
-// // Task handles
-// TaskHandle_t sensorTaskHandle;
-// TaskHandle_t loggingTaskHandle;
-
-// // ----------------- Hardware Monitoring -----------------
-// float get_temperature() {
-//     return (temprature_sens_read() - 32) / 1.8;
+// // Function to get internal temperature
+// float get_internal_temp() {
+//     uint8_t raw_temp = temprature_sens_read();
+//     return (raw_temp - 32) / 1.8;
 // }
 
-// float get_voltage() {
-//     int val = adc1_get_raw(ADC1_CHANNEL_0);
-//     return val * (3.3 / 4095); // 12-bit ADC with 3.3V reference
-// }
+// // Struct to hold system stats
+// typedef struct {
+//     float cpu_usage;
+//     float temperature;
+// } SystemStats;
 
-// int get_cpu_load() {
-//     return uxTaskGetNumberOfTasks(); // Approximate CPU load based on task count
-// }
+// QueueHandle_t systemQueue;
+// SemaphoreHandle_t taskSemaphore;  // Binary Semaphore
+// TaskHandle_t highLoadTaskHandle = NULL;
 
-// // ----------------- Tasks -----------------
-// void sensorTask(void *param) {
+// // High-load task waits on the semaphore before running
+// void high_load_task(void *pvParameter) {
+//     esp_task_wdt_add(NULL);  // Register task to watchdog
+
 //     while (1) {
-//         float temperature = get_temperature();
-//         float voltage = get_voltage();
-//         int cpuLoad = get_cpu_load();
-
-//         ESP_LOGI("Sensor", "Temperature: %.2f°C, Voltage: %.2fV, CPU Load: %d%%", 
-//                  temperature, voltage, cpuLoad);
-
-//         // Dynamic priority adjustment
-//         if (temperature > TEMP_THRESHOLD_HIGH) {
-//             ESP_LOGW("Sensor", "High temperature detected! Lowering priority.");
-//             vTaskPrioritySet(sensorTaskHandle, tskIDLE_PRIORITY);
-//         } else {
-//             vTaskPrioritySet(sensorTaskHandle, 3);
-//         }
-
-//         if (voltage < VOLTAGE_THRESHOLD_LOW) {
-//             ESP_LOGW("Sensor", "Low voltage! Suspending non-critical tasks.");
-//             vTaskSuspend(loggingTaskHandle); // Suspend logging if voltage is low
-//         } else {
-//             vTaskResume(loggingTaskHandle);
-//         }
-
-//         if (cpuLoad > CPU_LOAD_HIGH) {
-//             ESP_LOGW("Sensor", "High CPU load! Slowing down sampling.");
-//             vTaskDelay(pdMS_TO_TICKS(2000)); // Increase delay
-//         } else {
-//             vTaskDelay(pdMS_TO_TICKS(1000)); // Normal delay
+//         if (xSemaphoreTake(taskSemaphore, portMAX_DELAY) == pdTRUE) {
+//             printf("[High Load] Processing data...\n");
+//             vTaskDelay(pdMS_TO_TICKS(1000));  // Simulated workload
 //         }
 //     }
 // }
 
-// void loggingTask(void *param) {
+// // Task manager monitors temperature and controls tasks
+// void task_manager(void *pvParameter) {
+//     esp_task_wdt_add(NULL);  // Register task to watchdog
+
+//     SystemStats stats;
+
 //     while (1) {
-//         ESP_LOGI("Logger", "Logging data...");
-//         vTaskDelay(pdMS_TO_TICKS(3000));
+//         stats.temperature = get_internal_temp();
+//         stats.cpu_usage = (float)uxTaskGetNumberOfTasks();
+//         printf("Temp: %.2f°C | Active Tasks: %.2f\n", stats.temperature, stats.cpu_usage);
+
+//         if (stats.temperature > 65.0) {
+//             printf("🔥 Overheating detected! Stopping high-load task... 🔥\n");
+//             xSemaphoreGive(taskSemaphore);  // Release to let high_load_task stop
+//         } else {
+//             printf("✅ Resuming high-load task\n");
+//             xSemaphoreTake(taskSemaphore, 0);  // Allow high_load_task to run
+//         }
+
+//         // Send system stats to queue
+//         xQueueSend(systemQueue, &stats, pdMS_TO_TICKS(1000));
+
+//         esp_task_wdt_reset();  // Reset watchdog
+//         vTaskDelay(pdMS_TO_TICKS(5000));  // Monitor every 5 seconds
 //     }
 // }
 
-// // ----------------- Main Setup -----------------
-// void app_main(void) {
-//     ESP_LOGI("Main", "Starting Hardware-Aware Scheduler");
+// // Main function
+// void app_main() {
+//     // Configure the watchdog timer
+//     esp_task_wdt_config_t wdt_config = {
+//         .timeout_ms = 10000,  // 10-second timeout
+//         .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
+//         .trigger_panic = true
+//     };
 
-//     // ADC setup for voltage reading
-//     adc1_config_width(ADC_WIDTH_BIT_12);
-//     adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
+//     esp_task_wdt_init(&wdt_config);
+//     esp_task_wdt_add(NULL);  // Register main loop
 
-//     // Create tasks
-//     xTaskCreate(sensorTask, "Sensor Task", 4096, NULL, 3, &sensorTaskHandle);
-//     xTaskCreate(loggingTask, "Logging Task", 4096, NULL, 2, &loggingTaskHandle);
+//     systemQueue = xQueueCreate(5, sizeof(SystemStats));
+//     taskSemaphore = xSemaphoreCreateBinary();  // Initialize binary semaphore
+
+//     xTaskCreate(task_manager, "task_manager", 4096, NULL, 5, NULL);
+//     xTaskCreate(high_load_task, "high_load_task", 2048, NULL, 5, &highLoadTaskHandle);
+
+//     while (1) {
+//         esp_task_wdt_reset();  // Reset watchdog for main loop
+//         vTaskDelay(pdMS_TO_TICKS(1000));  // Allow FreeRTOS to manage tasks
+//     }
 // }
-
