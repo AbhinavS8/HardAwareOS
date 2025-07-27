@@ -15,10 +15,10 @@ typedef struct {
 } SystemStats;
 
 // Constants
-#define VOLTAGE_THRESHOLD 3.0  // Minimum voltage threshold (example: 3.0V)
+#define VOLTAGE_THRESHOLD 3.0 
 #define ADC_CHANNEL ADC1_CHANNEL_0  // ADC1 Channel 0 (GPIO36 on ESP32)
 #define MAX_ADC_READING 4095.0
-#define MAX_VOLTAGE 3.3  // ESP32 ADC max voltage (adjust for voltage divider)
+#define MAX_VOLTAGE 3.3 
 
 // Convert ADC reading to voltage
 float get_voltage() {
@@ -26,7 +26,7 @@ float get_voltage() {
     return (raw / MAX_ADC_READING) * MAX_VOLTAGE;
 }
 
-// Convert ESP32 internal sensor reading to temperature
+// Convert ESP32 sensor reading to temperature
 float get_internal_temp() {
     uint8_t raw_temp = temprature_sens_read();
     return (raw_temp - 32) / 1.8;
@@ -116,79 +116,4 @@ void app_main() {
     printf("\nProgram completion: %lld\n", esp_timer_get_time() / 1000);
 }
 
-
-
-// #include <stdio.h>
-// #include "freertos/FreeRTOS.h"
-// #include "freertos/semphr.h"
-// #include "esp_system.h"
-
-// SemaphoreHandle_t xPauseSemaphore = NULL;  // Global semaphore for pausing tasks
-// extern uint8_t temprature_sens_read();
-
-// typedef struct {
-//     float cpu_usage;
-//     float temperature;
-// } SystemStats;
-
-// // Function to get internal ESP32 temperature
-// float get_internal_temp() {
-//     uint8_t raw_temp = temprature_sens_read();
-//     return (raw_temp - 32) / 1.8;
-// }
-
-// // Temperature monitoring task
-// void temperature_check_task() {
-//     SystemStats stats;
-
-//     while (1) {
-//         stats.temperature = get_internal_temp();
-//         stats.cpu_usage = (float)uxTaskGetNumberOfTasks();
-//         printf("Temp: %.2f°C | Active Tasks: %.2f\n", stats.temperature, stats.cpu_usage);
-
-//         if (stats.temperature >= 70) {
-//             printf("HIGH TEMPERATURE DETECTED! PAUSING ALL TASKS...\n");
-
-//             // Take the semaphore to pause all tasks
-//             xSemaphoreTake(xPauseSemaphore, portMAX_DELAY);
-
-//             // Wait until temperature goes below 70°C
-//             while (get_internal_temp() >= 70) {
-//                 vTaskDelay(pdMS_TO_TICKS(2000));  // Delay and re-check temperature
-//             }
-
-//             // Give the semaphore back to resume all tasks
-//             printf("Temperature normalized. Resuming all tasks.\n");
-//             xSemaphoreGive(xPauseSemaphore);
-//         }
-
-//         vTaskDelay(pdMS_TO_TICKS(2000));  // Check temperature every 2 seconds
-//     }
-// }
-
-// // Example workload task
-// void high_load_task(void *param) {
-//     while (1) {
-//         // Wait for the semaphore 
-//         xSemaphoreTake(xPauseSemaphore, portMAX_DELAY);
-
-//         printf("[High Load] Processing data...\n");
-//         vTaskDelay(pdMS_TO_TICKS(1000)); 
-
-//         xSemaphoreGive(xPauseSemaphore);
-//     }
-// }
-
-
-// void app_main() {
-//     xPauseSemaphore = xSemaphoreCreateBinary();
-//     xSemaphoreGive(xPauseSemaphore);  
-
-//     printf("\nTime(ms) for program initiation: %lld\n", esp_timer_get_time() / 1000);
-
-//     xTaskCreate(high_load_task, "High Load Task", 2048, NULL, 1, NULL);
-//     xTaskCreate(temperature_check_task, "Temp Watch Task", 2048, NULL, 2, NULL);
-
-//     printf("\nProgram completion: %lld\n", esp_timer_get_time() / 1000);
-// }
 
