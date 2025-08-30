@@ -4,7 +4,7 @@
 #include "driver/adc.h"
 #include "esp_system.h"
 
-SemaphoreHandle_t xPauseSemaphore = NULL;  // Semaphore for pausing tasks
+SemaphoreHandle_t xPauseSemaphore = NULL;  // for pausing tasks
 
 extern uint8_t temprature_sens_read();
 
@@ -20,19 +20,17 @@ typedef struct {
 #define MAX_ADC_READING 4095.0
 #define MAX_VOLTAGE 3.3 
 
-// Convert ADC reading to voltage
 float get_voltage() {
     int raw = adc1_get_raw(ADC_CHANNEL);
     return (raw / MAX_ADC_READING) * MAX_VOLTAGE;
 }
 
-// Convert ESP32 sensor reading to temperature
 float get_internal_temp() {
     uint8_t raw_temp = temprature_sens_read();
     return (raw_temp - 32) / 1.8;
 }
 
-// Temperature monitoring task
+// use internal thermo 
 void temperature_check_task() {
     SystemStats stats;
 
@@ -58,7 +56,7 @@ void temperature_check_task() {
     }
 }
 
-// Voltage monitoring task
+// Voltage monitoring, checking for low voltage
 void voltage_check_task() {
     while (1) {
         float voltage = get_voltage();
@@ -79,7 +77,7 @@ void voltage_check_task() {
     }
 }
 
-// Example workload task
+// Example workload task for simulating
 void high_load_task(void *param) {
     while (1) {
         xSemaphoreTake(xPauseSemaphore, portMAX_DELAY);
@@ -97,12 +95,10 @@ void another_task(void *param) {
     }
 }
 
-// Main application entry point
 void app_main() {
     xPauseSemaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(xPauseSemaphore);
 
-    // Configure ADC
     adc1_config_width(ADC_WIDTH_BIT_12);
     adc1_config_channel_atten(ADC_CHANNEL, ADC_ATTEN_DB_11);  // Full-scale 3.3V range
 
